@@ -9,21 +9,39 @@ use tobj;
 
 // TODO instead of u32 use generic
 fn draw_triangle<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>
-(mut p0: Vector2<u32>, mut p1: Vector2<u32>, mut p2: Vector2<u32>, img: &mut ImageBuffer<P, Container>, pixel: P) {
+(mut p0: Vector2<i32>, mut p1: Vector2<i32>, mut p2: Vector2<i32>, img: &mut ImageBuffer<P, Container>, pixel: P) {
     // sort by y coordinate
     if p0.y > p1.y { mem::swap(&mut p0, &mut p1); }
     if p0.y > p2.y { mem::swap(&mut p0, &mut p2); }
     if p1.y > p2.y { mem::swap(&mut p1, &mut p2); }
-    draw_line(p0.x, p0.y, p1.x, p1.y, img, pixel);
-    draw_line(p0.x, p0.y, p2.x, p2.y, img, pixel);
-    draw_line(p1.x, p1.y, p2.x, p2.y, img, pixel);
 
-    let height = (p2.y - p0.y) as f32;
-    let width = (p2.x as i32 - p0.x as i32).abs() as f32;
-    println!("height: {}", height);
-    println!("width: {}", width);
-    println!("fraction: {}", ((p1.y - p0.y) as f32 / height));
-    draw_line((p0.x as f32 + (p2.x as i32 - p0.x as i32) as f32 * ((p1.y - p0.y) as f32 / height)) as u32, p1.y, p1.x, p1.y, img, pixel);
+    let total_height = p2.y - p0.y;
+
+    // render bottom part
+    let bottom_height = p1.y - p0.y;
+    for i in 0..bottom_height {
+        let total_height_fraction = i as f32 / total_height as f32;
+        let local_height_fraction = i as f32 / bottom_height as f32;
+        let mut from = (p0.x as f32 + (p2.x - p0.x) as f32 * total_height_fraction) as u32;
+        let mut to = (p0.x as f32 + (p1.x - p0.x) as f32 * local_height_fraction) as u32;
+        if from > to { mem::swap(&mut from, &mut to); }
+        for x in from..to {
+            img.put_pixel(x, (p0.y + i) as u32, pixel);
+        }
+    }
+
+    // render top part
+    let top_height = p2.y - p1.y;
+    for i in 0..top_height {
+        let alpha = (i + bottom_height) as f32 / total_height as f32;
+        let beta = i as f32 / top_height as f32;
+        let mut from = (p0.x as f32 + (p2.x - p0.x) as f32 * alpha) as u32;
+        let mut to = (p1.x as f32 + (p2.x - p1.x) as f32 * beta) as u32;
+        if from > to { mem::swap(&mut from, &mut to); }
+        for x in from..to {
+            img.put_pixel(x, (p0.y + i + bottom_height) as u32, pixel);
+        }
+    }
 }
 
 // TODO: instead of u32 use generic
@@ -53,11 +71,7 @@ fn draw_line<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>(mut 
         }
         error2 += derror2;
         if error2 > 1 {
-            if y1 > y0 {
-                y += 1;
-            } else {
-                y -= 1;
-            }
+            if y1 > y0 { y += 1; } else { y -= 1; }
             error2 -= dx * 2;
         }
     }
