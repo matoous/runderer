@@ -3,8 +3,23 @@ use image::imageops::{flip_vertical_in_place};
 use std::path::Path;
 use std::ops::{DerefMut};
 use core::mem;
+use nalgebra::{Vector2};
 use tobj;
 
+
+// TODO instead of u32 use generic
+fn draw_triangle<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>
+(mut p0: Vector2<u32>, mut p1: Vector2<u32>, mut p2: Vector2<u32>, img: &mut ImageBuffer<P, Container>, pixel: P) {
+    // sort by y coordinate
+    if p0.y > p1.y { mem::swap(&mut p0, &mut p1); }
+    if p0.y > p2.y { mem::swap(&mut p0, &mut p2); }
+    if p1.y > p2.y { mem::swap(&mut p1, &mut p2); }
+    draw_line(p0.x, p0.y, p1.x, p1.y, img, pixel);
+    draw_line(p0.x, p0.y, p2.x, p2.y, img, pixel);
+    draw_line(p1.x, p1.y, p2.x, p2.y, img, pixel);
+}
+
+// TODO: instead of u32 use generic
 fn draw_line<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>(mut x0: u32, mut y0: u32, mut x1: u32, mut y1: u32, img: &mut ImageBuffer<P, Container>, pixel: P) {
     // transpose if the line is steep
     let mut steep = false;
@@ -41,14 +56,8 @@ fn draw_line<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>(mut 
     }
 }
 
-fn main() {
-    let width = 600;
-    let height = 600;
-    let (models, _) =
-        tobj::load_obj(
-            &Path::new("models/african_head.obj"),
-            &tobj::LoadOptions::default(),
-        ).expect("Failed to OBJ load file");
+fn render(source: &str, out: &str, width: u32, height: u32) {
+    let (models, _) = tobj::load_obj(&Path::new(source), &tobj::LoadOptions::default()).unwrap();
 
     let model = models.get(0).unwrap();
     let mesh = &model.mesh;
@@ -74,5 +83,22 @@ fn main() {
         }
     }
     flip_vertical_in_place(&mut image);
-    image.save(&Path::new("african_head.png")).unwrap();
+    image.save(&Path::new(out)).unwrap();
+}
+
+fn main() {
+    // render("models/african_head.obj", "african_head.png", 600, 600);
+    let width = 200;
+    let height = 200;
+    let mut image: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::from_pixel(width, height, image::Rgb([0, 0, 0]));
+
+    let t0 = vec![Vector2::new(10, 70), Vector2::new(50, 160), Vector2::new(70, 80)];
+    let t1 = vec![Vector2::new(180, 50), Vector2::new(150, 1), Vector2::new(70, 180)];
+    let t2 = vec![Vector2::new(180, 150), Vector2::new(120, 160), Vector2::new(130, 180)];
+    draw_triangle(t0[0], t0[1], t0[2], &mut image, image::Rgb([255, 0, 0]));
+    draw_triangle(t1[0], t1[1], t1[2], &mut image, image::Rgb([255, 255, 255]));
+    draw_triangle(t2[0], t2[1], t2[2], &mut image, image::Rgb([0, 255, 0]));
+
+    flip_vertical_in_place(&mut image);
+    image.save(&Path::new("triangles.png")).unwrap();
 }
