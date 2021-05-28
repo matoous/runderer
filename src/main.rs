@@ -17,6 +17,16 @@ pub struct Line(pub Vector2<i32>, pub Vector2<i32>);
 #[derive(Debug)]
 pub struct Box(pub Vector2<i32>, pub Vector2<i32>);
 
+impl Box {
+    fn clamp(&mut self, min: Vector2<i32>, max: Vector2<i32>) -> &Box {
+        if self.0.x < min.x { self.0.x = min.x };
+        if self.1.x > max.x { self.1.x = max.x };
+        if self.0.y < min.y { self.0.y = min.y };
+        if self.1.y > max.y { self.1.y = max.y };
+        self
+    }
+}
+
 impl IntoIterator for Box {
     type Item = Vector2<i32>;
     type IntoIter = BoxIterator;
@@ -52,6 +62,7 @@ impl Iterator for BoxIterator {
 }
 
 impl Triangle {
+    // find bounding box of the triangle
     fn bounding_box(&self) -> Box where {
         let mut bboxmin = Vector2::new(i32::MAX, i32::MAX);
         let mut bboxmax = Vector2::new(i32::MIN, i32::MIN);
@@ -88,56 +99,15 @@ impl Triangle {
 // TODO instead of u32 use generic
 fn draw_triangle<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>(mut t: Triangle, img: &mut ImageBuffer<P, Container>, pixel: P) {
     let mut bbox = t.bounding_box();
-    if bbox.0.x < 0 { bbox.0.x = 0 };
-    if bbox.1.x > img.width() as i32 - 1 { bbox.1.x = img.width() as i32 - 1 };
-    if bbox.0.y < 0 { bbox.0.y = 0 };
-    if bbox.1.y > img.height() as i32 - 1 { bbox.1.x = img.height() as i32 - 1 };
+    // clamp to avoid panic around edges
+    bbox.clamp(Vector2::new(0, 0), Vector2::new(img.width() as i32 - 1, img.height() as i32 - 1));
+    // iterate through all pixel in the triangle and fill them
     for p in bbox.into_iter().filter(|&p| t.contains(p)) {
         img.put_pixel(p.x as u32, p.y as u32, pixel);
     }
 }
 
-// TODO: instead of u32 use generic
-fn draw_line<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>(mut l: Line, img: &mut ImageBuffer<P, Container>, pixel: P) {
-    // transpose if the line is steep
-    let mut steep = false;
-    if (l.1.x - l.0.x).abs() < (l.1.y - l.0.y).abs() {
-        let tmp = l.0.x;
-        l.0.x = l.0.y;
-        l.0.y = tmp;
-        let tmp = l.1.x;
-        l.1.x = l.1.y;
-        l.1.y = tmp;
-        steep = true;
-    }
-    // left to right
-    if l.0.x > l.1.x {
-        mem::swap(&mut l.0, &mut l.1);
-    }
-    let d = l.1 - l.0;
-    // how much further from the real line will we get in each iteration
-    let derror2 = d.y.abs() * 2;
-    let mut error2 = 0;
-    let mut y = l.0.y;
-    for x in l.0.x..l.1.x {
-        match steep {
-            true => img.put_pixel(y as u32, x as u32, pixel),
-            false => img.put_pixel(x as u32, y as u32, pixel)
-        }
-        error2 += derror2;
-        if error2 > 1 {
-            if l.1.y > l.0.y { y += 1; } else { y -= 1; }
-            error2 -= d.x * 2;
-        }
-    }
-}
-
 fn render(source: &str, out: &str, width: u32, height: u32) {
-    let (models, _) = tobj::load_obj(&Path::new(source), &tobj::LoadOptions::default()).unwrap();
-
-    let model = models.get(0).unwrap();
-    let mesh = &model.mesh;
-
     let mut image: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::new(width, height);
     for x in 0..image.width() {
         for y in 0..image.height() {
@@ -145,16 +115,25 @@ fn render(source: &str, out: &str, width: u32, height: u32) {
         }
     }
 
+    let (models, _) = tobj::load_obj(&Path::new(source), &tobj::LoadOptions::default()).unwrap();
+
+    let model = models.get(0).unwrap();
+    let mesh = &model.mesh;
+
     for face in (0..mesh.indices.len()).step_by(3) {
+        // take the vertices of given face
         let vertices = &mesh.indices[face..face + 3];
+        // scale scales the point to fill the image
         let scale = |p: &[f32]| -> Vector2<i32> {
             let x0 = (p[0] + 1.) * width as f32 / 2. - 1.;
             let y0 = (p[1] + 1.) * height as f32 / 2. - 1.;
             Vector2::new(x0 as i32, y0 as i32)
         };
+        // get point converts index to the point coordinates
         let get_point = |i| -> &[f32] {
             &mesh.positions[(i * 3) as usize..(i * 3 + 3) as usize]
         };
+        // return the points represented as a vector.
         let as_vector = |p: &[f32]| -> Vector3<f32> {
             Vector3::new(p[0], p[1], p[2])
         };
