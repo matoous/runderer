@@ -17,6 +17,13 @@ fn draw_triangle<P: 'static + Pixel, Container: DerefMut<Target=[P::Subpixel]>>
     draw_line(p0.x, p0.y, p1.x, p1.y, img, pixel);
     draw_line(p0.x, p0.y, p2.x, p2.y, img, pixel);
     draw_line(p1.x, p1.y, p2.x, p2.y, img, pixel);
+
+    let height = (p2.y - p0.y) as f32;
+    let width = (p2.x as i32 - p0.x as i32).abs() as f32;
+    println!("height: {}", height);
+    println!("width: {}", width);
+    println!("fraction: {}", ((p1.y - p0.y) as f32 / height));
+    draw_line((p0.x as f32 + (p2.x as i32 - p0.x as i32) as f32 * ((p1.y - p0.y) as f32 / height)) as u32, p1.y, p1.x, p1.y, img, pixel);
 }
 
 // TODO: instead of u32 use generic
